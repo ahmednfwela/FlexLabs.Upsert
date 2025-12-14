@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
+using System.Reflection;
+using FlexLabs.EntityFrameworkCore.Upsert;
 using FlexLabs.EntityFrameworkCore.Upsert.Internal.Expressions;
 using FlexLabs.EntityFrameworkCore.Upsert.Runners;
 using FluentAssertions;
@@ -15,20 +17,26 @@ public partial class ExpressionTests(ITestOutputHelper output) {
 
     #region helper
 
-    private PropertyMapping[] Parse(Expression<Func<TestEntity, TestEntity, TestEntity>> updater, bool useExpressionCompiler = false)
+    private PropertyMapping[] Parse(Action<SetterBuilder> configure, bool useExpressionCompiler = false)
     {
-        var result = useExpressionCompiler switch {
-            true => _parserWithCompiler.ParseUpdateExpression(updater),
-            false => _parser.ParseUpdateExpression(updater),
-        };
-        Print(result, updater);
+        var builder = new SetterBuilder();
+        configure(builder);
+
+        var result = useExpressionCompiler
+            ? _parserWithCompiler.ParseUpdateSetters(builder.Setters)
+            : _parser.ParseUpdateSetters(builder.Setters);
+
+        Print(result, builder.Setters);
         return result;
     }
 
-    private void Print(IEnumerable<PropertyMapping> mappings, object updater)
+    private void Print(IEnumerable<PropertyMapping> mappings, IReadOnlyList<UpsertSetter> setters)
     {
-        output.WriteLine("Expression:");
-        output.WriteLine(updater.ToString());
+        output.WriteLine("Setters:");
+        foreach (var setter in setters)
+        {
+            output.WriteLine($"  {setter.Member.Name} = {setter.ValueExpression}");
+        }
 
         output.WriteLine("\nResult:");
         output.WriteLine("new TestEntity {");
@@ -65,15 +73,97 @@ public partial class ExpressionTests(ITestOutputHelper output) {
         }
     }
 
+    private sealed class SetterBuilder
+    {
+        private readonly ParameterExpression _existing = Expression.Parameter(typeof(TestEntity), "a");
+        private readonly ParameterExpression _incoming = Expression.Parameter(typeof(TestEntity), "b");
+
+        public List<UpsertSetter> Setters { get; } = new();
+
+        public SetterBuilder Set<TProperty>(
+            Expression<Func<TestEntity, TProperty>> propertyExpression,
+            Expression<Func<TestEntity, TProperty>> valueExpression)
+        {
+            ArgumentNullException.ThrowIfNull(propertyExpression);
+            ArgumentNullException.ThrowIfNull(valueExpression);
+
+            var member = GetMember(propertyExpression.Body);
+            var normalizedValue = NormalizeValueLambda(valueExpression);
+            Setters.Add(new UpsertSetter(member, normalizedValue));
+            return this;
+        }
+
+        public SetterBuilder Set<TProperty>(
+            Expression<Func<TestEntity, TProperty>> propertyExpression,
+            Expression<Func<TestEntity, TestEntity, TProperty>> valueExpression)
+        {
+            ArgumentNullException.ThrowIfNull(propertyExpression);
+            ArgumentNullException.ThrowIfNull(valueExpression);
+
+            var member = GetMember(propertyExpression.Body);
+            var normalizedValue = NormalizeValueLambda(valueExpression);
+            Setters.Add(new UpsertSetter(member, normalizedValue));
+            return this;
+        }
+
+        private LambdaExpression NormalizeValueLambda<TProperty>(Expression<Func<TestEntity, TProperty>> valueExpression)
+        {
+            var body = new ParameterReplaceVisitor(valueExpression.Parameters[0], _existing)
+                .Visit(valueExpression.Body);
+
+            var normalized = Expression.Lambda(body!, _existing, _incoming);
+            return ExpressionNormalizer.NormalizeLambda(normalized);
+        }
+
+        private LambdaExpression NormalizeValueLambda<TProperty>(Expression<Func<TestEntity, TestEntity, TProperty>> valueExpression)
+        {
+            var body = new ParameterReplaceVisitor(valueExpression.Parameters[0], _existing)
+                .Visit(valueExpression.Body);
+
+            body = new ParameterReplaceVisitor(valueExpression.Parameters[1], _incoming)
+                .Visit(body!);
+
+            var normalized = Expression.Lambda(body!, _existing, _incoming);
+            return ExpressionNormalizer.NormalizeLambda(normalized);
+        }
+
+        private static MemberInfo GetMember(Expression expression)
+        {
+            expression = StripConvert(expression);
+
+            if (expression is not MemberExpression memberExpression)
+                throw new InvalidOperationException("Set() requires a simple member access like e => e.SomeProperty.");
+
+            if (memberExpression.Expression is not ParameterExpression)
+                throw new InvalidOperationException("Set() requires a direct property access on the entity parameter.");
+
+            return memberExpression.Member;
+        }
+
+        private static Expression StripConvert(Expression expression)
+        {
+            while (expression is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary)
+            {
+                expression = unary.Operand;
+            }
+
+            return expression;
+        }
+
+        private sealed class ParameterReplaceVisitor(ParameterExpression from, Expression to) : ExpressionVisitor
+        {
+            protected override Expression VisitParameter(ParameterExpression node)
+                => node == from ? to : base.VisitParameter(node);
+        }
+    }
+
     #endregion
 
 
     [Fact]
     public void Supports_Constant()
     {
-        var result = Parse((a, e) => new TestEntity {
-            Num1 = 1,
-        });
+        var result = Parse(set => set.Set(e => e.Num1, _ => 1));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -86,9 +176,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     public void Supports_Field()
     {
         var value = 2;
-        var result = Parse((a, e) => new TestEntity {
-            Num1 = value,
-        });
+        var result = Parse(set => set.Set(e => e.Num1, _ => value));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -101,9 +189,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     public void Supports_FieldAndProperty()
     {
         var value = new TestEntity { Num1 = 3 };
-        var result = Parse((a, e) => new TestEntity {
-            Num1 = value.Num1,
-        });
+        var result = Parse(set => set.Set(e => e.Num1, _ => value.Num1));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -116,9 +202,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     public void Supports_Method()
     {
         var value = "hello_world ";
-        var result = Parse((a, e) => new TestEntity {
-            Text1 = value.Trim(),
-        });
+        var result = Parse(set => set.Set(e => e.Text1, _ => value.Trim()));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Text1")
@@ -132,9 +216,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     {
         var value1 = "hello";
         var value2 = "world";
-        var result = Parse((a, b) => new TestEntity {
-            Text1 = string.Join(", ", new string[] { value1, value2 }),
-        });
+        var result = Parse(set => set.Set(e => e.Text1, _ => string.Join(", ", new string[] { value1, value2 })));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Text1")
@@ -146,9 +228,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void Supports_ValueIncrement()
     {
-        var result = Parse((a, b) => new TestEntity {
-            Num1 = a.Num1 + 1,
-        });
+        var result = Parse(set => set.Set(e => e.Num1, a => a.Num1 + 1));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -162,9 +242,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void Supports_ValueIncrement_Reverse()
     {
-        var result = Parse((a, b) => new TestEntity {
-            Num1 = 1 + a.Num1,
-        });
+        var result = Parse(set => set.Set(e => e.Num1, a => 1 + a.Num1));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -178,9 +256,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void Supports_ValueSubtract()
     {
-        var result = Parse((a, b) => new TestEntity {
-            Num1 = a.Num1 - 2,
-        });
+        var result = Parse(set => set.Set(e => e.Num1, a => a.Num1 - 2));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -194,9 +270,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void Supports_ValueMultiply()
     {
-        var result = Parse((a, b) => new TestEntity {
-            Num1 = a.Num1 * 3,
-        });
+        var result = Parse(set => set.Set(e => e.Num1, a => a.Num1 * 3));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -210,9 +284,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void Supports_ValueDivide()
     {
-        var result = Parse((a, b) => new TestEntity {
-            Num1 = a.Num1 / 4,
-        });
+        var result = Parse(set => set.Set(e => e.Num1, a => a.Num1 / 4));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -226,9 +298,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void Supports_ValueModulo()
     {
-        var result = Parse((a, b) => new TestEntity {
-            Num1 = a.Num1 % 4,
-        });
+        var result = Parse(set => set.Set(e => e.Num1, a => a.Num1 % 4));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -242,9 +312,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void Supports_ValueBitwiseOr()
     {
-        var result = Parse((a, b) => new TestEntity {
-            Num1 = a.Num1 | 1,
-        });
+        var result = Parse(set => set.Set(e => e.Num1, a => a.Num1 | 1));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -258,9 +326,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void Supports_ValueBitwiseAnd()
     {
-        var result = Parse((a, b) => new TestEntity {
-            Num1 = a.Num1 & 1,
-        });
+        var result = Parse(set => set.Set(e => e.Num1, a => a.Num1 & 1));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -274,9 +340,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void Supports_Property()
     {
-        var result = Parse((a, b) => new TestEntity {
-            Num1 = a.Num1,
-        });
+        var result = Parse(set => set.Set(e => e.Num1, a => a.Num1));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -288,9 +352,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void Supports_PropertyOther()
     {
-        var result = Parse((a, b) => new TestEntity {
-            Num1 = a.Num2,
-        });
+        var result = Parse(set => set.Set(e => e.Num1, a => a.Num2));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -302,9 +364,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void Supports_Property_WithSource()
     {
-        var result = Parse((e1, e2) => new TestEntity {
-            Num1 = e1.Num1,
-        });
+        var result = Parse(set => set.Set(e => e.Num1, e1 => e1.Num1));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -316,9 +376,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void Supports_Property_FromSource()
     {
-        var result = Parse((e1, e2) => new TestEntity {
-            Num1 = e2.Num1,
-        });
+        var result = Parse(set => set.Set(e => e.Num1, (e1, e2) => e2.Num1));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -330,9 +388,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void Supports_DateTime_Now()
     {
-        var result = Parse((e1, e2) => new TestEntity {
-            Updated = DateTime.Now,
-        });
+        var result = Parse(set => set.Set(e => e.Updated, _ => DateTime.Now));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Updated")
@@ -348,9 +404,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     {
         int value = 5;
 
-        var result = Parse((e1, e2) => new TestEntity {
-            NumNullable1 = value,
-        });
+        var result = Parse(set => set.Set(e => e.NumNullable1, _ => value));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("NumNullable1")
@@ -364,9 +418,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     {
         int? value = 5;
 
-        var result = Parse((e1, e2) => new TestEntity {
-            Num1 = (int) value,
-        });
+        var result = Parse(set => set.Set(e => e.Num1, _ => (int)value));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -380,9 +432,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     {
         int? value = 5;
 
-        var result = Parse((e1, e2) => new TestEntity {
-            Num1 = value ?? 0,
-        });
+        var result = Parse(set => set.Set(e => e.Num1, _ => value ?? 0));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -396,9 +446,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     {
         int? value = 5;
 
-        var result = Parse((e1, e2) => new TestEntity {
-            Num1 = value.GetValueOrDefault(),
-        });
+        var result = Parse(set => set.Set(e => e.Num1, _ => value.GetValueOrDefault()));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -411,14 +459,11 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     public void Supports_UnsupportedExpression_With_Compile()
     {
         var input = 5;
-        Expression<Func<TestEntity, TestEntity, TestEntity>> exp = (a, e1) => new TestEntity {
-            Num1 = input << 4,
-        };
 
-        var action = () => Parse(exp);
+        var action = () => Parse(set => set.Set(e => e.Num1, _ => input << 4));
         action.Should().Throw<UnsupportedExpressionException>();
 
-        var result = Parse(exp, useExpressionCompiler: true);
+        var result = Parse(set => set.Set(e => e.Num1, _ => input << 4), useExpressionCompiler: true);
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -430,9 +475,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void CompoundExpression_Sum()
     {
-        var result = Parse((e1, e2) => new TestEntity {
-            Text1 = e1.Text1 + "." + e2.Text2,
-        });
+        var result = Parse(set => set.Set(e => e.Text1, (e1, e2) => e1.Text1 + "." + e2.Text2));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Text1")
@@ -448,9 +491,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void CompoundExpression_Sum_Grouped1()
     {
-        var result = Parse((e1, e2) => new TestEntity {
-            Text1 = (e1.Text1 + ".") + e2.Text2,
-        });
+        var result = Parse(set => set.Set(e => e.Text1, (e1, e2) => (e1.Text1 + ".") + e2.Text2));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Text1")
@@ -466,9 +507,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void CompoundExpression_Sum_Grouped2()
     {
-        var result = Parse((e1, e2) => new TestEntity {
-            Text1 = e1.Text1 + ("." + e2.Text2),
-        });
+        var result = Parse(set => set.Set(e => e.Text1, (e1, e2) => e1.Text1 + ("." + e2.Text2)));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Text1")
@@ -484,9 +523,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void CompoundExpression_Multiply()
     {
-        var result = Parse((e1, e2) => new TestEntity {
-            Num1 = e1.Num1 + 7 * e2.Num2,
-        });
+        var result = Parse(set => set.Set(e => e.Num1, (e1, e2) => e1.Num1 + 7 * e2.Num2));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -502,9 +539,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void CompoundExpression_Multiply_Grouped1()
     {
-        var result = Parse((e1, e2) => new TestEntity {
-            Num1 = (e1.Num1 + 7) * e2.Num2,
-        });
+        var result = Parse(set => set.Set(e => e.Num1, (e1, e2) => (e1.Num1 + 7) * e2.Num2));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -520,9 +555,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void CompoundExpression_Multiply_Grouped2()
     {
-        var result = Parse((e1, e2) => new TestEntity {
-            Num1 = e1.Num1 + (7 * e2.Num2),
-        });
+        var result = Parse(set => set.Set(e => e.Num1, (e1, e2) => e1.Num1 + (7 * e2.Num2)));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -538,9 +571,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void CompoundExpression_Conditional()
     {
-        var result = Parse((a, b) => new TestEntity {
-            Num1 = a.Num1 + 7 < 0 ? 0 : a.Num1 + 7,
-        });
+        var result = Parse(set => set.Set(e => e.Num1, a => a.Num1 + 7 < 0 ? 0 : a.Num1 + 7));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -561,9 +592,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void CompoundExpression_Conditional_NotEqual()
     {
-        var result = Parse((e1, e2) => new TestEntity {
-            Num1 = e1.Num1 != 4 ? 0 : 1,
-        });
+        var result = Parse(set => set.Set(e => e.Num1, e1 => e1.Num1 != 4 ? 0 : 1));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -580,9 +609,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void CompoundExpression_Conditional_NotNull()
     {
-        var result = Parse((e1, e2) => new TestEntity {
-            Num1 = e1.Text1 != null ? 0 : 1,
-        });
+        var result = Parse(set => set.Set(e => e.Num1, e1 => e1.Text1 != null ? 0 : 1));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
@@ -599,9 +626,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void Condition_AndAlso()
     {
-        var result = Parse((e1, e2) => new TestEntity {
-            Boolean = e1.Num1 != e2.Num1 && e1.Text1 != e2.Text1
-        });
+        var result = Parse(set => set.Set(e => e.Boolean, (e1, e2) => e1.Num1 != e2.Num1 && e1.Text1 != e2.Text1));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Boolean")
@@ -619,9 +644,7 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void Condition_ElseIf()
     {
-        var result = Parse((e1, e2) => new TestEntity {
-            Boolean = e1.Num1 != e2.Num1 || e1.Text1 != e2.Text1
-        });
+        var result = Parse(set => set.Set(e => e.Boolean, (e1, e2) => e1.Num1 != e2.Num1 || e1.Text1 != e2.Text1));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Boolean")
@@ -650,11 +673,8 @@ public partial class ExpressionTests(ITestOutputHelper output) {
     [Fact]
     public void UpdateCondition_CanHandleImplicitTypeMapping()
     {
-        var result = Parse((e1, e2) => new TestEntity
-        {
-            Num1 = e2.Short1
-        });
-        
+        var result = Parse(set => set.Set(e => e.Num1, (e1, e2) => e2.Short1));
+
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Num1")
             .WithValueOfType<PropertyValue>()

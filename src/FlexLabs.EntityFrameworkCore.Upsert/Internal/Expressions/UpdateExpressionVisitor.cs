@@ -30,6 +30,30 @@ internal class UpdateExpressionVisitor(
     private static ConstantValue WithColumn(ConstantValue constant, IColumnBase column)
         => new(constant.Value, column, constant.MemberInfo);
 
+    private static IKnownValue AttachColumnToUnmappedConstant(IKnownValue value, IColumnBase? column)
+    {
+        if (column is null)
+            return value;
+
+        return value is ConstantValue { ColumnProperty: null } constant
+            ? WithColumn(constant, column)
+            : value;
+    }
+
+    private static (IKnownValue Left, IKnownValue Right) AttachPeerColumnMappings(IKnownValue left, IKnownValue right)
+    {
+        // If one side is (or contains) a column and the other side contains an unmapped constant,
+        // attach that column so EF Core can apply relational type mapping/value conversion.
+        // This is especially important for providers that require explicit typing for some CLR types.
+        var leftColumn = TryGetColumn(left);
+        var rightColumn = TryGetColumn(right);
+
+        left = AttachColumnToUnmappedConstant(left, rightColumn ?? leftColumn);
+        right = AttachColumnToUnmappedConstant(right, leftColumn ?? rightColumn);
+
+        return (left, right);
+    }
+
     protected override Expression VisitMethodCall(MethodCallExpression node)
     {
         var context = node.Object != null ? GetValueObject(node.Object) : null;
@@ -47,6 +71,10 @@ internal class UpdateExpressionVisitor(
                 {
                     var left = GetKnownValue(node.Left);
                     var right = GetKnownValue(node.Right);
+
+                    // Propagate type mapping context for constants, e.g. COALESCE(column, 0UL)
+                    // should pass 0UL with the column mapping.
+                    (left, right) = AttachPeerColumnMappings(left, right);
 
                     return left switch
                     {
@@ -76,27 +104,7 @@ internal class UpdateExpressionVisitor(
                     var left = GetKnownValue(node.Left);
                     var right = GetKnownValue(node.Right);
 
-                    // If one side is a column and the other side is a constant, attach the column
-                    // to the constant so parameter creation can use the column's type mapping/converter.
-                    // This is important for providers (e.g. Npgsql) that don't support UInt64 parameters
-                    // without explicit type info; the column mapping may convert it (e.g. to decimal).
-                    if (left is ConstantValue leftConst && leftConst.ColumnProperty is null)
-                    {
-                        var rightColumn = TryGetColumn(right);
-                        if (rightColumn != null)
-                        {
-                            left = WithColumn(leftConst, rightColumn);
-                        }
-                    }
-
-                    if (right is ConstantValue rightConst && rightConst.ColumnProperty is null)
-                    {
-                        var leftColumn = TryGetColumn(left);
-                        if (leftColumn != null)
-                        {
-                            right = WithColumn(rightConst, leftColumn);
-                        }
-                    }
+                    (left, right) = AttachPeerColumnMappings(left, right);
 
                     if (left is ConstantValue { Value: var l } &&
                         right is ConstantValue { Value: var r } &&
@@ -123,6 +131,18 @@ internal class UpdateExpressionVisitor(
         var ifTrue = GetKnownValue(node.IfTrue);
         var ifFalse = GetKnownValue(node.IfFalse);
         var condition = GetKnownValue(node.Test);
+
+        // Ensure constants in conditional branches inherit a relevant column mapping when available.
+        // Example patterns:
+        // - CASE WHEN ... THEN column ELSE 0UL END
+        // - CASE WHEN ... THEN 0UL ELSE column END
+        // IMPORTANT: Do NOT use the condition to infer the branch mapping.
+        // For expressions like: (e.Num1 == 1 ? 10UL : 20UL) the condition references Num1 (int),
+        // but the branch values are unrelated to Num1 and should remain unmapped so the caller
+        // (e.g. ExpressionParser applying the target column) can attach the correct mapping.
+        var branchColumn = TryGetColumn(ifTrue) ?? TryGetColumn(ifFalse);
+        ifTrue = AttachColumnToUnmappedConstant(ifTrue, branchColumn);
+        ifFalse = AttachColumnToUnmappedConstant(ifFalse, branchColumn);
 
         return new KnownExpression(node.NodeType, ifTrue, ifFalse, condition);
     }
@@ -295,7 +315,7 @@ internal class UpdateExpressionVisitor(
 
         throw new UnsupportedExpressionException(expression);
     }
-    
+
     private static Type UnwrapNullableType(Type type)
         => Nullable.GetUnderlyingType(type) ?? type;
 }

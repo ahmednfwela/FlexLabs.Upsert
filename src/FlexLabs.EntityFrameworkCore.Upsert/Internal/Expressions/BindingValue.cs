@@ -19,12 +19,12 @@ internal class BindingValue(List<MemberBinding> bindings) : Expression, IKnownVa
     /// <summary>
     /// Invalid Operation
     /// </summary>
-    public IEnumerable<ConstantValue> GetConstantValues() => throw new InvalidOperationException("Not Supported for BindingValue");
+    public IEnumerable<ConstantValue> GetConstantValues() => throw new InvalidOperationException(Resources.FormatNotSupportedFor(nameof(BindingValue)));
 
     /// <summary>
     /// Invalid Operation
     /// </summary>
-    public IEnumerable<PropertyValue> GetPropertyValues() => throw new InvalidOperationException("Not Supported for BindingValue");
+    public IEnumerable<PropertyValue> GetPropertyValues() => throw new InvalidOperationException(Resources.FormatNotSupportedFor(nameof(BindingValue)));
 
     /// <inheritdoc />
     public override string ToString()

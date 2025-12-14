@@ -46,7 +46,7 @@ internal sealed class ExpressionParser<TEntity>(RelationalTableBase table, Runne
             (null, null) => new KnownExpression(known.ExpressionType, value1),
             (not null, null) => new KnownExpression(known.ExpressionType, value1, value2),
             (not null, not null) => new KnownExpression(known.ExpressionType, value1, value2, value3),
-            _ => throw new InvalidOperationException("Invalid KnownExpression value state"),
+            _ => throw new InvalidOperationException(Resources.InvalidKnownExpressionValueState),
         };
     }
 
@@ -64,16 +64,43 @@ internal sealed class ExpressionParser<TEntity>(RelationalTableBase table, Runne
         return null;
     }
 
-    public PropertyMapping[] ParseUpdateExpression(Expression<Func<TEntity, TEntity, TEntity>> updater)
+    public PropertyMapping[] ParseUpdateSetters(IReadOnlyList<UpsertSetter> setters)
     {
-        if (updater.Body is not MemberInitExpression entityUpdater)
+        ArgumentNullException.ThrowIfNull(setters);
+        if (setters.Count == 0)
+            throw new InvalidOperationException(Resources.AtLeastOneSetPropertyCallIsRequired);
+
+        var firstLambda = setters[0].ValueExpression;
+        if (firstLambda.Parameters.Count != 2)
+            throw new InvalidOperationException(Resources.SetterValueExpressionsMustHaveExistingAndIncomingParameters);
+
+        var left = firstLambda.Parameters[0];
+        var right = firstLambda.Parameters[1];
+
+        var visitor = new UpdateExpressionVisitor(table, left, right, queryOptions.UseExpressionCompiler);
+
+        var mappings = new List<PropertyMapping>(setters.Count);
+        foreach (var setter in setters)
         {
-            throw new ArgumentException(Resources.FormatUpdaterMustBeAnInitialiserOfTheTEntityType(nameof(updater)), nameof(updater));
+            if (setter.ValueExpression.Parameters.Count != 2)
+                throw new InvalidOperationException(Resources.SetterValueExpressionsMustHaveExistingAndIncomingParameters);
+            if (!ReferenceEquals(setter.ValueExpression.Parameters[0], left) || !ReferenceEquals(setter.ValueExpression.Parameters[1], right))
+                throw new InvalidOperationException(Resources.AllSetPropertyCallsMustUseSameExistingAndIncomingParameterInstances);
+
+            var member = setter.Member;
+            var column = table.FindColumn(member.Name)
+                ?? throw new InvalidOperationException(Resources.FormatUnknownPropertyInExpression(member.Name, setter.ValueExpression.Body));
+
+            var normalized = ExpressionNormalizer.NormalizeLambda(setter.ValueExpression);
+            var value = visitor.GetKnownValue(normalized.Body);
+
+            foreach (var mapping in ExpandKnownValue(column, value, normalized.Body))
+            {
+                mappings.Add(mapping);
+            }
         }
 
-        var visitor = new UpdateExpressionVisitor(table, updater.Parameters[0], updater.Parameters[1], queryOptions.UseExpressionCompiler);
-        var result = ParseMemberInitExpression(entityUpdater, visitor).ToArray();
-        return result;
+        return mappings.ToArray();
     }
 
     [return: NotNullIfNotNull(nameof(updateCondition))]
@@ -92,22 +119,6 @@ internal sealed class ExpressionParser<TEntity>(RelationalTableBase table, Runne
         }
 
         return knownExpression;
-    }
-
-
-    private IEnumerable<PropertyMapping> ParseMemberInitExpression(MemberInitExpression node, UpdateExpressionVisitor visitor)
-    {
-        foreach (var binding in node.Bindings.Cast<MemberAssignment>())
-        {
-            var column = table.FindColumn(binding.Member.Name)
-                ?? throw new InvalidOperationException(Resources.FormatUnknownPropertyInExpression(binding.Member.Name, binding.Expression));
-            var value = visitor.GetKnownValue(binding.Expression);
-
-            foreach (var mapping in ExpandKnownValue(column, value, binding.Expression))
-            {
-                yield return mapping;
-            }
-        }
     }
 
     /// <summary>

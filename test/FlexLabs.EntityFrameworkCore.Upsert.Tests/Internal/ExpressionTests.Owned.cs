@@ -10,13 +10,10 @@ public partial class ExpressionTests
     [Fact, Trait("Category", "Owned")]
     public void Supports_Owned_Constant()
     {
-        var result = Parse((a, e) => new TestEntity
+        var result = Parse(set => set.Set(e => e.Child, _ => new OwnedChildEntity
         {
-            Child = new OwnedChildEntity
-            {
-                Num1 = 1
-            }
-        });
+            Num1 = 1
+        }));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Child_Num1")
@@ -29,13 +26,10 @@ public partial class ExpressionTests
     public void Supports_Owned_Field()
     {
         var value = 2;
-        var result = Parse((a, e) => new TestEntity
+        var result = Parse(set => set.Set(e => e.Child, _ => new OwnedChildEntity
         {
-            Child = new OwnedChildEntity
-            {
-                Num1 = value
-            }
-        });
+            Num1 = value
+        }));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Child_Num1")
@@ -48,13 +42,10 @@ public partial class ExpressionTests
     public void Supports_Owned_FieldAndProperty()
     {
         var value = new { Num1 = 3 };
-        var result = Parse((a, e) => new TestEntity
+        var result = Parse(set => set.Set(e => e.Child, _ => new OwnedChildEntity
         {
-            Child = new OwnedChildEntity
-            {
-                Num1 = value.Num1
-            }
-        });
+            Num1 = value.Num1
+        }));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Child_Num1")
@@ -67,13 +58,10 @@ public partial class ExpressionTests
     public void Supports_Owned_Method()
     {
         var value = "hello_world ";
-        var result = Parse((a, e) => new TestEntity
+        var result = Parse(set => set.Set(e => e.Child, _ => new OwnedChildEntity
         {
-            Child = new OwnedChildEntity
-            {
-                Text1 = value.Trim(),
-            }
-        });
+            Text1 = value.Trim(),
+        }));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Child_Text1")
@@ -87,13 +75,10 @@ public partial class ExpressionTests
     {
         var value1 = "hello";
         var value2 = "world";
-        var result = Parse((a, b) => new TestEntity
+        var result = Parse(set => set.Set(e => e.Child, _ => new OwnedChildEntity
         {
-            Child = new OwnedChildEntity
-            {
-                Text1 = string.Join(", ", new string[] { value1, value2 }),
-            }
-        });
+            Text1 = string.Join(", ", new string[] { value1, value2 }),
+        }));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Child_Text1")
@@ -105,13 +90,10 @@ public partial class ExpressionTests
     [Fact, Trait("Category", "Owned")]
     public void Supports_Owned_ValueIncrement()
     {
-        var result = Parse((a, b) => new TestEntity
+        var result = Parse(set => set.Set(e => e.Child, a => new OwnedChildEntity
         {
-            Child = new OwnedChildEntity
-            {
-                Num1 = a.Child.Num1 + 1,
-            }
-        });
+            Num1 = a.Child.Num1 + 1,
+        }));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Child_Num1")
@@ -125,13 +107,10 @@ public partial class ExpressionTests
     [Fact, Trait("Category", "Owned")]
     public void Supports_Owned_Property()
     {
-        var result = Parse((a, e) => new TestEntity
+        var result = Parse(set => set.Set(e => e.Child, a => new OwnedChildEntity
         {
-            Child = new OwnedChildEntity
-            {
-                Num1 = a.Child.Num2
-            }
-        });
+            Num1 = a.Child.Num2
+        }));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Child_Num1")
@@ -143,13 +122,10 @@ public partial class ExpressionTests
     [Fact, Trait("Category", "Owned")]
     public void Handles_Name_Collisions_With_Owned_Entities()
     {
-        var result = Parse((a, e) => new TestEntity
+        var result = Parse(set => set.Set(e => e.Child, a => new OwnedChildEntity
         {
-            Child = new OwnedChildEntity
-            {
-                Num1 = a.Num1
-            }
-        });
+            Num1 = a.Num1
+        }));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Child_Num1")

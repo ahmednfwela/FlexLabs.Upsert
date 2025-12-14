@@ -410,11 +410,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.Countries.Upsert(newCountry)
                 .On(c => c.ISO)
-                .WhenMatched(c => new Country
-                {
-                    Name = newCountry.Name,
-                    Updated = newCountry.Updated,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(c => c.Name, c => newCountry.Name)
+                    .SetProperty(c => c.Updated, c => newCountry.Updated))
                 .Run();
 
             dbContext.Countries.OrderBy(c => c.ID).Should().SatisfyRespectively(
@@ -438,11 +436,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.Countries.Upsert(newCountry)
                 .On(c => c.ISO)
-                .WhenMatched(c => new Country
-                {
-                    Name = "Australia",
-                    Updated = _now,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(c => c.Name, c => "Australia")
+                    .SetProperty(c => c.Updated, c => _now))
                 .Run();
 
             dbContext.Countries.OrderBy(c => c.ID).Should().SatisfyRespectively(
@@ -466,11 +462,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.Countries.Upsert(newCountry)
                 .On(c => c.ISO)
-                .WhenMatched(c => new Country
-                {
-                    Name = newCountry.Name,
-                    Updated = newCountry.Updated,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(c => c.Name, c => newCountry.Name)
+                    .SetProperty(c => c.Updated, c => newCountry.Updated))
                 .Run();
 
             dbContext.Countries.OrderBy(c => c.ID).Should().SatisfyRespectively(
@@ -543,11 +537,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.PageVisits.Upsert(newVisit)
                 .On(pv => new { pv.UserID, pv.Date })
-                .WhenMatched(pv => new PageVisit
-                {
-                    Visits = pv.Visits + 1,
-                    LastVisit = _now,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(pv => pv.Visits, pv => pv.Visits + 1)
+                    .SetProperty(pv => pv.LastVisit, pv => _now))
                 .Run();
 
             dbContext.PageVisits.OrderBy(c => c.Date).Should().SatisfyRespectively(
@@ -573,11 +565,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.PageVisits.Upsert(newVisit)
                 .On(pv => new { pv.UserID, pv.Date })
-                .WhenMatched(pv => new PageVisit
-                {
-                    Visits = pv.Visits + increment,
-                    LastVisit = _now,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(pv => pv.Visits, pv => pv.Visits + increment)
+                    .SetProperty(pv => pv.LastVisit, pv => _now))
                 .Run();
 
             dbContext.PageVisits.OrderBy(c => c.Date).Should().SatisfyRespectively(
@@ -602,11 +592,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.PageVisits.Upsert(newVisit)
                 .On(pv => new { pv.UserID, pv.Date })
-                .WhenMatched(pv => new PageVisit
-                {
-                    Visits = pv.Visits + _increment,
-                    LastVisit = _now,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(pv => pv.Visits, pv => pv.Visits + _increment)
+                    .SetProperty(pv => pv.LastVisit, pv => _now))
                 .Run();
 
             dbContext.PageVisits.OrderBy(c => c.Date).Should().SatisfyRespectively(
@@ -631,11 +619,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.PageVisits.Upsert(newVisit)
                 .On(pv => new { pv.UserID, pv.Date })
-                .WhenMatched((pv, pvi) => new PageVisit
-                {
-                    Visits = pv.Visits + 1,
-                    LastVisit = pvi.LastVisit,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(pv => pv.Visits, (pv, pvi) => pv.Visits + 1)
+                    .SetProperty(pv => pv.LastVisit, (pv, pvi) => pvi.LastVisit))
                 .Run();
 
             dbContext.PageVisits.OrderBy(c => c.Date).Should().SatisfyRespectively(
@@ -660,11 +646,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.PageVisits.Upsert(newVisit)
                 .On(pv => new { pv.UserID, pv.Date })
-                .WhenMatched((pv, pvi) => new PageVisit
-                {
-                    Visits = pv.Visits + pvi.Visits,
-                    LastVisit = pvi.LastVisit,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(pv => pv.Visits, (pv, pvi) => pv.Visits + pvi.Visits)
+                    .SetProperty(pv => pv.LastVisit, (pv, pvi) => pvi.LastVisit))
                 .Run();
 
             dbContext.PageVisits.OrderBy(c => c.Date).Should().SatisfyRespectively(
@@ -689,11 +673,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.PageVisits.Upsert(newVisit)
                 .On(pv => new { pv.UserID, pv.Date })
-                .WhenMatched(pv => new PageVisit
-                {
-                    Visits = 1 + pv.Visits,
-                    LastVisit = _now,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(pv => pv.Visits, pv => 1 + pv.Visits)
+                    .SetProperty(pv => pv.LastVisit, pv => _now))
                 .Run();
 
             dbContext.PageVisits.OrderBy(c => c.Date).Should().SatisfyRespectively(
@@ -718,11 +700,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.PageVisits.Upsert(newVisit)
                 .On(pv => new { pv.UserID, pv.Date })
-                .WhenMatched(pv => new PageVisit
-                {
-                    Visits = pv.Visits - 2,
-                    LastVisit = _now,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(pv => pv.Visits, pv => pv.Visits - 2)
+                    .SetProperty(pv => pv.LastVisit, pv => _now))
                 .Run();
 
             dbContext.PageVisits.OrderBy(c => c.Date).Should().SatisfyRespectively(
@@ -747,11 +727,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.PageVisits.Upsert(newVisit)
                 .On(pv => new { pv.UserID, pv.Date })
-                .WhenMatched(pv => new PageVisit
-                {
-                    Visits = pv.Visits * 3,
-                    LastVisit = _now,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(pv => pv.Visits, pv => pv.Visits * 3)
+                    .SetProperty(pv => pv.LastVisit, pv => _now))
                 .Run();
 
             dbContext.PageVisits.OrderBy(c => c.Date).Should().SatisfyRespectively(
@@ -776,11 +754,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.PageVisits.Upsert(newVisit)
                 .On(pv => new { pv.UserID, pv.Date })
-                .WhenMatched(pv => new PageVisit
-                {
-                    Visits = pv.Visits | 3,
-                    LastVisit = _now,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(pv => pv.Visits, pv => pv.Visits | 3)
+                    .SetProperty(pv => pv.LastVisit, pv => _now))
                 .Run();
 
             dbContext.PageVisits.OrderBy(c => c.Date).Should().SatisfyRespectively(
@@ -805,11 +781,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.PageVisits.Upsert(newVisit)
                 .On(pv => new { pv.UserID, pv.Date })
-                .WhenMatched(pv => new PageVisit
-                {
-                    Visits = pv.Visits & 3,
-                    LastVisit = _now,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(pv => pv.Visits, pv => pv.Visits & 3)
+                    .SetProperty(pv => pv.LastVisit, pv => _now))
                 .Run();
 
             dbContext.PageVisits.OrderBy(c => c.Date).Should().SatisfyRespectively(
@@ -834,11 +808,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.PageVisits.Upsert(newVisit)
                 .On(pv => new { pv.UserID, pv.Date })
-                .WhenMatched(pv => new PageVisit
-                {
-                    Visits = pv.Visits / 4,
-                    LastVisit = _now,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(pv => pv.Visits, pv => pv.Visits / 4)
+                    .SetProperty(pv => pv.LastVisit, pv => _now))
                 .Run();
 
             dbContext.PageVisits.OrderBy(c => c.Date).Should().SatisfyRespectively(
@@ -863,11 +835,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.PageVisits.Upsert(newVisit)
                 .On(pv => new { pv.UserID, pv.Date })
-                .WhenMatched(pv => new PageVisit
-                {
-                    Visits = pv.Visits % 4,
-                    LastVisit = _now,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(pv => pv.Visits, pv => pv.Visits % 4)
+                    .SetProperty(pv => pv.LastVisit, pv => _now))
                 .Run();
 
             dbContext.PageVisits.OrderBy(c => c.Date).Should().SatisfyRespectively(
@@ -900,11 +870,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.PageVisits.UpsertRange(newVisit1, newVisit2)
                 .On(pv => new { pv.UserID, pv.Date })
-                .WhenMatched(pv => new PageVisit
-                {
-                    Visits = pv.Visits + 1,
-                    LastVisit = _now,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(pv => pv.Visits, pv => pv.Visits + 1)
+                    .SetProperty(pv => pv.LastVisit, pv => _now))
                 .Run();
 
             dbContext.PageVisits.OrderBy(c => c.Date).Should().SatisfyRespectively(
@@ -938,11 +906,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.PageVisits.UpsertRange(newVisit1, newVisit2)
                 .On(pv => new { pv.UserID, pv.Date })
-                .WhenMatched(pv => new PageVisit
-                {
-                    Visits = pv.Visits + 1,
-                    LastVisit = _now,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(pv => pv.Visits, pv => pv.Visits + 1)
+                    .SetProperty(pv => pv.LastVisit, pv => _now))
                 .Run();
 
             dbContext.PageVisits.OrderBy(c => c.Date).Should().SatisfyRespectively(
@@ -977,11 +943,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.PageVisits.UpsertRange(newVisit1, newVisit2)
                 .On(pv => new { pv.UserID, pv.Date })
-                .WhenMatched(pv => new PageVisit
-                {
-                    Visits = pv.Visits + 1,
-                    LastVisit = _now,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(pv => pv.Visits, pv => pv.Visits + 1)
+                    .SetProperty(pv => pv.LastVisit, pv => _now))
                 .Run();
 
             dbContext.PageVisits.OrderBy(c => c.Date).Should().SatisfyRespectively(
@@ -1014,11 +978,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.PageVisits.UpsertRange(newVisit1, newVisit2)
                 .On(pv => new { pv.UserID, pv.Date })
-                .WhenMatched((pv, pvi) => new PageVisit
-                {
-                    Visits = pv.Visits + 1,
-                    LastVisit = pvi.LastVisit,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(pv => pv.Visits, (pv, pvi) => pv.Visits + 1)
+                    .SetProperty(pv => pv.LastVisit, (pv, pvi) => pvi.LastVisit))
                 .Run();
 
             dbContext.PageVisits.OrderBy(c => c.Date).Should().SatisfyRespectively(
@@ -1348,10 +1310,8 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
             };
 
             dbContext.JsonDocumentDatas.Upsert(updatedJson)
-                .WhenMatched((a, b) => new JsonDocumentData
-                {
-                    Data = b.Data,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(j => j.Data, (a, b) => b.Data))
                 .Run();
 
             dbContext.JsonDocumentDatas.OrderBy(c => c.ID).Should().SatisfyRespectively(
@@ -1499,11 +1459,10 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.TestEntities.Upsert(newItem)
                 .On(j => j.Num1)
-                .WhenMatched((je, jn) => new TestEntity
-                {
-                    Text1 = newItem2.Text1,
-                    Text2 = null,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Text1, _ => newItem2.Text1)
+                    .SetProperty(e => e.Text2, _ => (string)null)
+                )
                 .Run();
 
             dbContext.TestEntities.OrderBy(t => t.ID).Should().SatisfyRespectively(
@@ -1526,10 +1485,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.TestEntities.Upsert(newItem)
                 .On(j => j.Num1)
-                .WhenMatched((je, jn) => new TestEntity
-                {
-                    Num2 = je.Num2 * 2 + jn.Num2,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Num2, (je, jn) => (je.Num2 * 2) + jn.Num2)
+                )
                 .Run();
 
             dbContext.TestEntities.OrderBy(t => t.ID).Should().SatisfyRespectively(
@@ -1560,10 +1518,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.TestEntities.Upsert(newItem)
                 .On(j => j.Num1)
-                .WhenMatched((je, jn) => new TestEntity
-                {
-                    Num2 = je.Num2 * 2 + jn.Num2,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Num2, (je, jn) => (je.Num2 * 2) + jn.Num2)
+                )
                 .Run();
 
             dbContext.TestEntities.OrderBy(t => t.ID).Should().SatisfyRespectively(
@@ -1586,10 +1543,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.TestEntities.Upsert(newItem)
                 .On(j => j.Num1)
-                .WhenMatched((je, jn) => new TestEntity
-                {
-                    Num2 = je.Num2 - jn.Num2 > 0 ? je.Num2 - jn.Num2 : 0,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Num2, (je, jn) => je.Num2 - jn.Num2 > 0 ? je.Num2 - jn.Num2 : 0)
+                )
                 .Run();
 
             dbContext.TestEntities.OrderBy(t => t.ID).Should().SatisfyRespectively(
@@ -1620,10 +1576,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.TestEntities.Upsert(newItem)
                 .On(j => j.Num1)
-                .WhenMatched((je, jn) => new TestEntity
-                {
-                    Num2 = je.Num2 - jn.Num2 > 0 ? je.Num2 - jn.Num2 : 0,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Num2, (je, jn) => je.Num2 - jn.Num2 > 0 ? je.Num2 - jn.Num2 : 0)
+                )
                 .Run();
 
             dbContext.TestEntities.OrderBy(t => t.ID).Should().SatisfyRespectively(
@@ -1654,10 +1609,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.TestEntities.Upsert(newItem)
                 .On(j => j.Num1)
-                .WhenMatched((je, jn) => new TestEntity
-                {
-                    Num2 = je.Num2 - jn.Num2 > 0 ? je.Num2 - jn.Num2 : 0,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Num2, (je, jn) => je.Num2 - jn.Num2 > 0 ? je.Num2 - jn.Num2 : 0)
+                )
                 .Run();
 
             dbContext.TestEntities.OrderBy(t => t.ID).Should().SatisfyRespectively(
@@ -1680,10 +1634,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.TestEntities.Upsert(newItem)
                 .On(j => j.Num1)
-                .WhenMatched((old, ins) => new TestEntity
-                {
-                    Text1 = ins.Text1 ?? old.Text1,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Text1, (old, ins) => ins.Text1 ?? old.Text1)
+                )
                 .Run();
 
             dbContext.TestEntities.OrderBy(t => t.ID).Should().SatisfyRespectively(
@@ -1706,10 +1659,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.TestEntities.Upsert(newItem)
                 .On(j => j.Num1)
-                .WhenMatched((old, ins) => new TestEntity
-                {
-                    Text1 = ins.Text1 == null ? old.Text1 : ins.Text1,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Text1, (old, ins) => ins.Text1 == null ? old.Text1 : ins.Text1)
+                )
                 .Run();
 
             dbContext.TestEntities.OrderBy(t => t.ID).Should().SatisfyRespectively(
@@ -1785,10 +1737,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
             var action = () => dbContext.TestEntities.Upsert(newItem)
                 .On(j => j.Num1)
                 .Exclude(e => e.Text2)
-                .WhenMatched((e1, e2) => new TestEntity
-                {
-                    Text2 = e2.Text2,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Text2, (_, e2) => e2.Text2)
+                )
                 .Run();
             action.Should().Throw<InvalidOperationException>();
         }
@@ -1817,10 +1768,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.TestEntities.Upsert(newItem)
                 .On(j => j.Num1)
-                .WhenMatched((e1, e2) => new TestEntity
-                {
-                    Num2 = e2.Num2,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Num2, (_, e2) => e2.Num2)
+                )
                 .UpdateIf((ed, en) => en.Num2 == 2)
                 .Run();
 
@@ -1844,10 +1794,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.TestEntities.Upsert(newItem)
                 .On(j => j.Num1)
-                .WhenMatched((e1, e2) => new TestEntity
-                {
-                    Num2 = e2.Num2,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Num2, (_, e2) => e2.Num2)
+                )
                 .UpdateIf((ed, en) => ed.Num2 != en.Num2)
                 .Run();
 
@@ -1902,10 +1851,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.TestEntities.Upsert(newItem)
                 .On(j => j.Num1)
-                .WhenMatched((e1, e2) => new TestEntity
-                {
-                    Num2 = e2.Num2,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Num2, (_, e2) => e2.Num2)
+                )
                 .UpdateIf((ed, en) => ed.Num2 != en.Num2 || ed.Text1 != en.Text1)
                 .Run();
 
@@ -1996,10 +1944,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.TestEntities.UpsertRange(dbItem1, dbItem2)
                 .On(j => j.Num1)
-                .WhenMatched(j => new TestEntity
-                {
-                    Num2 = j.Num2 + 1,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Num2, j => j.Num2 + 1)
+                )
                 .UpdateIf(j => j.Text1 != null)
                 .Run();
 
@@ -2029,10 +1976,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.TestEntities.UpsertRange(dbItem1, dbItem2)
                 .On(j => j.Num1)
-                .WhenMatched((j, i) => new TestEntity
-                {
-                    Num2 = j.Num2 + 1,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Num2, j => j.Num2 + 1)
+                )
                 .UpdateIf(j => j.Text1 == "hello")
                 .Run();
 
@@ -2062,11 +2008,10 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.TestEntities.UpsertRange(dbItem1, dbItem2)
                 .On(j => j.Num1)
-                .WhenMatched((j, i) => new TestEntity
-                {
-                    Num2 = j.Num2 + 1,
-                    Text1 = "world",
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Num2, j => j.Num2 + 1)
+                    .SetProperty(e => e.Text1, _ => "world")
+                )
                 .UpdateIf(j => j.Text1 == "hello")
                 .Run();
 
@@ -2097,10 +2042,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             var result = dbContext.ULongEntities.Upsert(newItem)
                 .On(e => e.Num1)
-                .WhenMatched(e => new ULongEntity
-                {
-                    Counter = (e.Counter * 2) + 1UL,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Counter, e => (e.Counter * 2) + 1UL)
+                )
                 .RunAndReturn();
 
             result.Should().HaveCount(1);
@@ -2137,10 +2081,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             var result = dbContext.ULongEntities.Upsert(newItem)
                 .On(e => e.Num1)
-                .WhenMatched(e => new ULongEntity
-                {
-                    Counter = 5UL,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Counter, _ => 5UL)
+                )
                 .RunAndReturn();
 
             result.Should().HaveCount(1);
@@ -2177,10 +2120,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             var result = dbContext.ULongEntities.Upsert(newItem)
                 .On(e => e.Num1)
-                .WhenMatched(e => new ULongEntity
-                {
-                    Counter = e.Num1 == 1 ? 10UL : 20UL,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Counter, e => e.Num1 == 1 ? 10UL : 20UL)
+                )
                 .RunAndReturn();
 
             result.Should().HaveCount(1);
@@ -2192,6 +2134,87 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
                 {
                     e.Num1.Should().Be(1);
                     e.Counter.Should().Be(10UL);
+                });
+        }
+
+        [Fact]
+        public void Upsert_WhenMatched_ULongCounter_UpdateIf_CoalesceCondition_RunAndReturn()
+        {
+            Assert.SkipWhen(_fixture.DbDriver is DbDriver.MySQL or DbDriver.Oracle, "Returning records is not implemented in MySQL and Oracle");
+
+            var dbItem = new ULongEntity
+            {
+                Num1 = 1,
+                Counter = 123UL,
+            };
+
+            ResetDb(dbItem);
+            using var dbContext = new TestDbContext(_fixture.DataContextOptions);
+
+            var newItem = new ULongEntity
+            {
+                Num1 = 1,
+                Counter = 0UL,
+            };
+
+            var result = dbContext.ULongEntities.Upsert(newItem)
+                .On(e => e.Num1)
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Counter, _ => 5UL)
+                )
+                .UpdateIf(e => ((ulong?)e.Counter ?? 0UL) > 0UL)
+                .RunAndReturn();
+
+            result.Should().HaveCount(1);
+            result.Single().Num1.Should().Be(1);
+            result.Single().Counter.Should().Be(5UL);
+
+            dbContext.ULongEntities.OrderBy(e => e.ID).Should().SatisfyRespectively(
+                e =>
+                {
+                    e.Num1.Should().Be(1);
+                    e.Counter.Should().Be(5UL);
+                });
+        }
+
+        [Fact]
+        public void Upsert_WhenMatched_ULongCounter_UpdateIf_ConditionalCondition_False_NoUpdate()
+        {
+            Assert.SkipWhen(_fixture.DbDriver is DbDriver.MySQL or DbDriver.Oracle, "Returning records is not implemented in MySQL and Oracle");
+
+            var dbItem = new ULongEntity
+            {
+                Num1 = 1,
+                Counter = 123UL,
+            };
+
+            ResetDb(dbItem);
+            using var dbContext = new TestDbContext(_fixture.DataContextOptions);
+
+            var newItem = new ULongEntity
+            {
+                Num1 = 1,
+                Counter = 0UL,
+            };
+
+            var result = dbContext.ULongEntities.Upsert(newItem)
+                .On(e => e.Num1)
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Counter, _ => 5UL)
+                )
+                // Num1 is 1, so the conditional yields 0UL and the condition is false.
+                .UpdateIf(e => (e.Num1 == 2 ? e.Counter : 0UL) > 0UL)
+                .RunAndReturn();
+
+            result.Should().HaveCount(1);
+            result.Single().Num1.Should().Be(1);
+            result.Single().Counter.Should().Be(123UL);
+
+            dbContext.ULongEntities.OrderBy(e => e.ID).Should().SatisfyRespectively(
+                e =>
+                {
+                    e.Num1.Should().Be(1);
+                    e.Counter.Should().Be(123UL);
                 });
         }
 
@@ -2217,10 +2240,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             var result = dbContext.ULongEntities.UpsertRange(upserts)
                 .On(e => e.Num1)
-                .WhenMatched(e => new ULongEntity
-                {
-                    Counter = e.Counter + 1UL,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Counter, e => e.Counter + 1UL)
+                )
                 .RunAndReturn();
 
             result.Should().HaveCount(2);
@@ -2260,11 +2282,10 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
             dbContext.TestEntities.Upsert(newEntity)
                 .On(c => c.Num1)
                 .UpdateIf((a, b) => a.Short1 != b.Short1)
-                .WhenMatched((a, b) => new TestEntity
-                {
-                    Num2 = a.Short1 + b.Short1,
-                    Short1 = (short)(a.Short1 - b.Short1),
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Num2, (a, b) => a.Short1 + b.Short1)
+                    .SetProperty(e => e.Short1, (a, b) => (short)(a.Short1 - b.Short1))
+                )
                 .Run();
 
             dbContext.TestEntities.OrderBy(c => c.ID).Should().SatisfyRespectively(
@@ -2392,10 +2413,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             var resultItems = await dbContext.TestEntitiesFiltered.Upsert(dbItem1Updated)
                 .On(j => j.Key)
-                .WhenMatched((a, b) => new TestEntityFiltered
-                {
-                    Counter = a.Counter + b.Counter,
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Counter, (a, b) => a.Counter + b.Counter)
+                )
                 .RunAndReturnAsync(TestContext.Current.CancellationToken);
 
             resultItems.Should().HaveCount(1);

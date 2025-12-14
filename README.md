@@ -22,10 +22,9 @@ DataContext.DailyVisits
         Visits = 1,
     })
     .On(v => new { v.UserID, v.Date })
-    .WhenMatched(v => new DailyVisit
-    {
-        Visits = v.Visits + 1,
-    })
+    .WhenMatched(set => set
+        .SetProperty(v => v.Visits, v => v.Visits + 1)
+    )
     .RunAsync();
 ```
 

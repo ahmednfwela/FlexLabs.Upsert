@@ -24,7 +24,7 @@ namespace FlexLabs.EntityFrameworkCore.Upsert
         private readonly ICollection<TEntity> _entities;
         private Expression<Func<TEntity, object>>? _matchExpression;
         private Expression<Func<TEntity, object>>? _excludeExpression;
-        private Expression<Func<TEntity, TEntity, TEntity>>? _updateExpression;
+        private IReadOnlyList<UpsertSetter>? _updateSetters;
         private Expression<Func<TEntity, TEntity, bool>>? _updateCondition;
         private RunnerQueryOptions _queryOptions;
 
@@ -74,7 +74,7 @@ namespace FlexLabs.EntityFrameworkCore.Upsert
         {
             if (_excludeExpression != null)
                 throw new InvalidOperationException(Resources.FormatCantCallMethodTwice(nameof(Exclude)));
-            if (_updateExpression != null)
+            if (_updateSetters != null)
                 throw new InvalidOperationException(Resources.FormatCantCallMethodWhenMethodHasBeenCalledAsTheyAreMutuallyExclusive(nameof(Exclude), nameof(WhenMatched)));
 
             _excludeExpression = exclude ?? throw new ArgumentNullException(nameof(exclude));
@@ -82,44 +82,26 @@ namespace FlexLabs.EntityFrameworkCore.Upsert
         }
 
         /// <summary>
-        /// Specifies which columns should be updated when a matched entity is found
+        /// Specifies which columns should be updated when a matched entity is found, using a setter-style API.
+        /// Supports both (existing) and (existing, incoming) value expressions via <see cref="UpsertMatchedUpdateBuilder{TEntity}.SetProperty{TProperty}(Expression{Func{TEntity, TProperty}}, Expression{Func{TEntity, TProperty}})"/>
+        /// and <see cref="UpsertMatchedUpdateBuilder{TEntity}.SetProperty{TProperty}(Expression{Func{TEntity, TProperty}}, Expression{Func{TEntity, TEntity, TProperty}})"/>.
         /// </summary>
-        /// <param name="updater">The expression that returns a new instance of TEntity, with the columns that have to be updated being initialised with new values</param>
+        /// <param name="setters">Callback that configures the properties to update.</param>
         /// <returns>The current instance of the UpsertCommandBuilder</returns>
-        public UpsertCommandBuilder<TEntity> WhenMatched(Expression<Func<TEntity, TEntity>> updater)
+        public UpsertCommandBuilder<TEntity> WhenMatched(Action<UpsertMatchedUpdateBuilder<TEntity>> setters)
         {
-            ArgumentNullException.ThrowIfNull(updater);
-            if (_updateExpression != null)
+            ArgumentNullException.ThrowIfNull(setters);
+            if (_updateSetters != null)
                 throw new InvalidOperationException(Resources.FormatCantCallMethodTwice(nameof(WhenMatched)));
             if (_queryOptions.NoUpdate)
                 throw new InvalidOperationException(Resources.FormatCantCallMethodWhenMethodHasBeenCalledAsTheyAreMutuallyExclusive(nameof(WhenMatched), nameof(NoUpdate)));
             if (_excludeExpression != null)
                 throw new InvalidOperationException(Resources.FormatCantCallMethodWhenMethodHasBeenCalledAsTheyAreMutuallyExclusive(nameof(WhenMatched), nameof(Exclude)));
 
-            _updateExpression =
-                Expression.Lambda<Func<TEntity, TEntity, TEntity>>(
-                    updater.Body,
-                    updater.Parameters[0],
-                    Expression.Parameter(typeof(TEntity)));
-            return this;
-        }
+            var builder = new UpsertMatchedUpdateBuilder<TEntity>();
+            setters(builder);
+            _updateSetters = builder.Setters;
 
-        /// <summary>
-        /// Specifies which columns should be updated when a matched entity is found.
-        /// The second type parameter points to the entity that was originally passed to be inserted
-        /// </summary>
-        /// <param name="updater">The expression that returns a new instance of TEntity, with the columns that have to be updated being initialised with new values</param>
-        /// <returns>The current instance of the UpsertCommandBuilder</returns>
-        public UpsertCommandBuilder<TEntity> WhenMatched(Expression<Func<TEntity, TEntity, TEntity>> updater)
-        {
-            if (_updateExpression != null)
-                throw new InvalidOperationException(Resources.FormatCantCallMethodTwice(nameof(WhenMatched)));
-            if (_queryOptions.NoUpdate)
-                throw new InvalidOperationException(Resources.FormatCantCallMethodWhenMethodHasBeenCalledAsTheyAreMutuallyExclusive(nameof(WhenMatched), nameof(NoUpdate)));
-            if (_excludeExpression != null)
-                throw new InvalidOperationException(Resources.FormatCantCallMethodWhenMethodHasBeenCalledAsTheyAreMutuallyExclusive(nameof(WhenMatched), nameof(Exclude)));
-
-            _updateExpression = updater ?? throw new ArgumentNullException(nameof(updater));
             return this;
         }
 
@@ -179,7 +161,7 @@ namespace FlexLabs.EntityFrameworkCore.Upsert
         /// <returns></returns>
         public UpsertCommandBuilder<TEntity> NoUpdate()
         {
-            if (_updateExpression != null)
+            if (_updateSetters != null)
                 throw new InvalidOperationException(Resources.FormatCantCallMethodTwice(nameof(WhenMatched)));
 
             _queryOptions.NoUpdate = true;
@@ -205,7 +187,7 @@ namespace FlexLabs.EntityFrameworkCore.Upsert
                 return 0;
 
             var commandRunner = GetCommandRunner();
-            return commandRunner.Run(_dbContext, _entityType, _entities, _matchExpression, _excludeExpression, _updateExpression, _updateCondition, _queryOptions);
+            return commandRunner.Run(_dbContext, _entityType, _entities, _matchExpression, _excludeExpression, _updateSetters, _updateCondition, _queryOptions);
         }
 
         /// <summary>
@@ -217,7 +199,7 @@ namespace FlexLabs.EntityFrameworkCore.Upsert
                 return [];
 
             var commandRunner = GetCommandRunner();
-            return commandRunner.RunAndReturn(_dbContext, _entityType, _entities, _matchExpression, _excludeExpression, _updateExpression, _updateCondition, _queryOptions);
+            return commandRunner.RunAndReturn(_dbContext, _entityType, _entities, _matchExpression, _excludeExpression, _updateSetters, _updateCondition, _queryOptions);
         }
 
         /// <summary>
@@ -231,7 +213,7 @@ namespace FlexLabs.EntityFrameworkCore.Upsert
                 return Task.FromResult(0);
 
             var commandRunner = GetCommandRunner();
-            return commandRunner.RunAsync(_dbContext, _entityType, _entities, _matchExpression, _excludeExpression, _updateExpression, _updateCondition, _queryOptions, token);
+            return commandRunner.RunAsync(_dbContext, _entityType, _entities, _matchExpression, _excludeExpression, _updateSetters, _updateCondition, _queryOptions, token);
         }
 
         /// <summary>
@@ -244,7 +226,7 @@ namespace FlexLabs.EntityFrameworkCore.Upsert
                 return Task.FromResult<ICollection<TEntity>>([]);
 
             var commandRunner = GetCommandRunner();
-            return commandRunner.RunAndReturnAsync(_dbContext, _entityType, _entities, _matchExpression, _excludeExpression, _updateExpression, _updateCondition, _queryOptions, token);
+            return commandRunner.RunAndReturnAsync(_dbContext, _entityType, _entities, _matchExpression, _excludeExpression, _updateSetters, _updateCondition, _queryOptions, token);
         }
     }
 }

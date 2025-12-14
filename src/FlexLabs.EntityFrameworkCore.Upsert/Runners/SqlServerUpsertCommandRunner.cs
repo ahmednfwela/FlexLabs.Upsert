@@ -31,6 +31,8 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Runners
             KnownExpression? updateCondition,
             bool returnResult = false)
         {
+            var updateConditionSql = updateCondition != null ? ExpandExpression(updateCondition) : null;
+
             var result = new StringBuilder();
             result.Append(CultureInfo.InvariantCulture, $"MERGE INTO {tableName} WITH (HOLDLOCK) AS [T] USING ( VALUES (");
             result.Append(string.Join("), (", entities.Select(ec => string.Join(", ", ec.Select(e => e.DefaultSql ?? Parameter(e.Value.ArgumentIndex))))));
@@ -48,10 +50,22 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Runners
             if (updateExpressions != null)
             {
                 result.Append(" WHEN MATCHED");
-                if (updateCondition != null)
-                    result.Append(CultureInfo.InvariantCulture, $" AND {ExpandExpression(updateCondition)}");
+                if (updateConditionSql != null && !returnResult)
+                    result.Append(CultureInfo.InvariantCulture, $" AND {updateConditionSql}");
+
                 result.Append(" THEN UPDATE SET ");
-                result.Append(string.Join(", ", updateExpressions.Select((e, i) => $"{EscapeName(e.ColumnName)} = {ExpandValue(e.Value)}")));
+
+                if (updateCondition != null && returnResult)
+                {
+                    // WHEN MATCHED AND <condition> would suppress OUTPUT rows when condition is false.
+                    // For RunAndReturn, always perform UPDATE but preserve values when the condition is false.
+                    result.Append(string.Join(", ", updateExpressions.Select(e =>
+                        $"{EscapeName(e.ColumnName)} = CASE WHEN {updateConditionSql} THEN {ExpandValue(e.Value)} ELSE {TargetPrefix}{EscapeName(e.ColumnName)}{TargetSuffix} END")));
+                }
+                else
+                {
+                    result.Append(string.Join(", ", updateExpressions.Select(e => $"{EscapeName(e.ColumnName)} = {ExpandValue(e.Value)}")));
+                }
             }
             if (returnResult)
             {

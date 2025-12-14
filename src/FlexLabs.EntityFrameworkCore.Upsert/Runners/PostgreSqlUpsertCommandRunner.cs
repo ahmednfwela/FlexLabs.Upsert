@@ -42,9 +42,21 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Runners
             if (updateExpressions != null)
             {
                 result.Append("UPDATE SET ");
-                result.Append(string.Join(", ", updateExpressions.Select((e, i) => $"{EscapeName(e.ColumnName)} = {ExpandValue(e.Value)}")));
-                if (updateCondition != null)
-                    result.Append(CultureInfo.InvariantCulture, $" WHERE {ExpandExpression(updateCondition)}");
+                if (updateCondition != null && returnResult)
+                {
+                    var updateConditionSql = ExpandExpression(updateCondition);
+                    // If we use a WHERE clause here, Postgres returns 0 rows when the condition is false.
+                    // For RunAndReturn, we want the matched row returned even when no update occurs.
+                    // Embed the condition into the SET expressions so values remain unchanged when false.
+                    result.Append(string.Join(", ", updateExpressions.Select(e =>
+                        $"{EscapeName(e.ColumnName)} = CASE WHEN {updateConditionSql} THEN {ExpandValue(e.Value)} ELSE {TargetPrefix}{EscapeName(e.ColumnName)} END")));
+                }
+                else
+                {
+                    result.Append(string.Join(", ", updateExpressions.Select(e => $"{EscapeName(e.ColumnName)} = {ExpandValue(e.Value)}")));
+                    if (updateCondition != null)
+                        result.Append(CultureInfo.InvariantCulture, $" WHERE {ExpandExpression(updateCondition)}");
+                }
             }
             else
             {

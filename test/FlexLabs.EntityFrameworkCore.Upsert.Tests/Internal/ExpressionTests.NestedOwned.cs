@@ -10,16 +10,13 @@ public partial class ExpressionTests
     [Fact, Trait("Category", "NestedOwned")]
     public void Supports_NestedOwned_Constant()
     {
-        var result = Parse((a, e) => new TestEntity
+        var result = Parse(set => set.Set(e => e.Child, _ => new OwnedChildEntity
         {
-            Child = new OwnedChildEntity
+            NestedChild = new NestedOwnedChildEntity
             {
-                NestedChild = new NestedOwnedChildEntity
-                {
-                    Num1 = 1
-                }
+                Num1 = 1
             }
-        });
+        }));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Child_NestedChild_Num1")
@@ -32,16 +29,13 @@ public partial class ExpressionTests
     public void Supports_NestedOwned_Field()
     {
         var value = 2;
-        var result = Parse((a, e) => new TestEntity
+        var result = Parse(set => set.Set(e => e.Child, _ => new OwnedChildEntity
         {
-            Child = new OwnedChildEntity
+            NestedChild = new NestedOwnedChildEntity
             {
-                NestedChild = new NestedOwnedChildEntity
-                {
-                    Num1 = value
-                }
+                Num1 = value
             }
-        });
+        }));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Child_NestedChild_Num1")
@@ -54,16 +48,13 @@ public partial class ExpressionTests
     public void Supports_NestedOwned_FieldAndProperty()
     {
         var value = new { Num1 = 3 };
-        var result = Parse((a, e) => new TestEntity
+        var result = Parse(set => set.Set(e => e.Child, _ => new OwnedChildEntity
         {
-            Child = new OwnedChildEntity
+            NestedChild = new NestedOwnedChildEntity
             {
-                NestedChild = new NestedOwnedChildEntity
-                {
-                    Num1 = value.Num1
-                }
+                Num1 = value.Num1
             }
-        });
+        }));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Child_NestedChild_Num1")
@@ -76,16 +67,13 @@ public partial class ExpressionTests
     public void Supports_NestedOwned_Method()
     {
         var value = "hello_world ";
-        var result = Parse((a, e) => new TestEntity
+        var result = Parse(set => set.Set(e => e.Child, _ => new OwnedChildEntity
         {
-            Child = new OwnedChildEntity
+            NestedChild = new NestedOwnedChildEntity
             {
-                NestedChild = new NestedOwnedChildEntity
-                {
-                    Text1 = value.Trim(),
-                }
+                Text1 = value.Trim(),
             }
-        });
+        }));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Child_NestedChild_Text1")
@@ -99,16 +87,13 @@ public partial class ExpressionTests
     {
         var value1 = "hello";
         var value2 = "world";
-        var result = Parse((a, b) => new TestEntity
+        var result = Parse(set => set.Set(e => e.Child, _ => new OwnedChildEntity
         {
-            Child = new OwnedChildEntity
+            NestedChild = new NestedOwnedChildEntity
             {
-                NestedChild = new NestedOwnedChildEntity
-                {
-                    Text1 = string.Join(", ", new string[] { value1, value2 }),
-                }
+                Text1 = string.Join(", ", new string[] { value1, value2 }),
             }
-        });
+        }));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Child_NestedChild_Text1")
@@ -120,16 +105,13 @@ public partial class ExpressionTests
     [Fact, Trait("Category", "NestedOwned")]
     public void Supports_NestedOwned_ValueIncrement()
     {
-        var result = Parse((a, b) => new TestEntity
+        var result = Parse(set => set.Set(e => e.Child, a => new OwnedChildEntity
         {
-            Child = new OwnedChildEntity
+            NestedChild = new NestedOwnedChildEntity
             {
-                NestedChild = new NestedOwnedChildEntity
-                {
-                    Num1 = a.Child.NestedChild.Num1 + 1,
-                }
+                Num1 = a.Child.NestedChild.Num1 + 1,
             }
-        });
+        }));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Child_NestedChild_Num1")
@@ -143,16 +125,13 @@ public partial class ExpressionTests
     [Fact, Trait("Category", "NestedOwned")]
     public void Supports_NestedOwned_Property()
     {
-        var result = Parse((a, e) => new TestEntity
+        var result = Parse(set => set.Set(e => e.Child, a => new OwnedChildEntity
         {
-            Child = new OwnedChildEntity
+            NestedChild = new NestedOwnedChildEntity
             {
-                NestedChild = new NestedOwnedChildEntity
-                {
-                    Num1 = a.Child.NestedChild.Num2
-                }
+                Num1 = a.Child.NestedChild.Num2
             }
-        });
+        }));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Child_NestedChild_Num1")
@@ -164,16 +143,13 @@ public partial class ExpressionTests
     [Fact, Trait("Category", "NestedOwned")]
     public void Handles_Name_Collisions_With_NestedOwned_Entities()
     {
-        var result = Parse((a, e) => new TestEntity
+        var result = Parse(set => set.Set(e => e.Child, a => new OwnedChildEntity
         {
-            Child = new OwnedChildEntity
+            NestedChild = new NestedOwnedChildEntity
             {
-                NestedChild = new NestedOwnedChildEntity
-                {
-                    Num1 = a.Num1
-                }
+                Num1 = a.Num1
             }
-        });
+        }));
 
         result[0].Should().BePropertyMapping(_ => _
             .WithColumn("Child_NestedChild_Num1")

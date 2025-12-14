@@ -86,11 +86,11 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.Parents.Upsert(newParent)
                 .On(p => p.ID)
-                .WhenMatched((a, b) => new Parent
-                {
-                    Counter = b.Counter + 1,
-                    Child = b.Child, // owned direct mapping - should expand to all columns including sub nested.
-                })
+                .WhenMatched(set => set
+                    .SetProperty(p => p.Counter, (_, b) => b.Counter + 1)
+                    // owned direct mapping - should expand to all columns including sub nested.
+                    .SetProperty(p => p.Child, (_, b) => b.Child)
+                )
                 .Run();
 
             dbContext.Parents.OrderBy(p => p.ID).Should().SatisfyRespectively(
@@ -135,14 +135,14 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.Parents.Upsert(newParent)
                 .On(p => p.ID)
-                .WhenMatched((a, b) => new Parent
-                {
-                    Counter = b.Counter + 1,
-                    Child = new Child
+                .WhenMatched(set => set
+                    .SetProperty(p => p.Counter, (_, b) => b.Counter + 1)
+                    .SetProperty(p => p.Child, (_, b) => new Child
                     {
-                        SubChild = b.Child.SubChild, // nested owned direct mapping - should expand to all columns.
-                    }
-                })
+                        // nested owned direct mapping - should expand to all columns.
+                        SubChild = b.Child.SubChild,
+                    })
+                )
                 .Run();
 
             dbContext.Parents.OrderBy(p => p.ID).Should().SatisfyRespectively(
@@ -187,17 +187,17 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.Parents.Upsert(newParent)
                 .On(p => p.ID)
-                .WhenMatched((a, b) => new Parent
-                {
-                    Counter = b.Counter + 1,
-                    Child = new Child
+                .WhenMatched(set => set
+                    .SetProperty(p => p.Counter, (_, b) => b.Counter + 1)
+                    .SetProperty(p => p.Child, (_, b) => new Child
                     {
                         ChildName = b.Child.ChildName,
-                        SubChild = new SubChild {
+                        SubChild = new SubChild
+                        {
                             Age = b.Child.SubChild.Age,
                         },
-                    }
-                })
+                    })
+                )
                 .Run();
 
             dbContext.Parents.OrderBy(p => p.ID).Should().SatisfyRespectively(
@@ -347,11 +347,11 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             dbContext.CompanyOwnedJson.Upsert(company)
                 .On(p => p.Id)
-                .WhenMatched((a, b) => new CompanyOwnedJson
-                {
-                    Name = b.Name,
-                    Meta = b.Meta, // assigning a JSON is supported.
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Name, (_, b) => b.Name)
+                    // assigning a JSON is supported.
+                    .SetProperty(e => e.Meta, (_, b) => b.Meta)
+                )
                 .Run();
 
             dbContext.CompanyOwnedJson.OrderBy(p => p.Id).Should().SatisfyRespectively(
@@ -410,23 +410,22 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             var action = void () => dbContext.CompanyOwnedJson.Upsert(company)
                 .On(p => p.Id)
-                .WhenMatched((a, b) => new CompanyOwnedJson
-                {
-                    Name = b.Name,
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Name, (_, b) => b.Name)
                     // NOTE: expression not working: translating this to SQL is hard to get right.
-                    Meta = new CompanyMeta
+                    .SetProperty(e => e.Meta, (a, b) => new CompanyMeta
                     {
                         Required = b.Meta.Required, // Accessing deep JSON properties is not supported!
                         Nested = new CompanyNestedMeta
                         {
                             Title = a.Meta.Nested.Title,
                         }
-                    }
-                })
+                    })
+                )
                 .Run();
 
             action.Should().Throw<UnsupportedExpressionException>()
-                .WithMessage("Reading JSON members is not supported. Unsupported Access Expression: b.Meta.Required");
+                .WithMessage("Reading JSON members is not supported. Unsupported Access Expression: *Meta.Required");
         }
 
         [Fact]
@@ -476,19 +475,18 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
 
             var action = void () => dbContext.CompanyOwnedJson.Upsert(company)
                 .On(p => p.Id)
-                .WhenMatched((a, b) => new CompanyOwnedJson
-                {
-                    Name = b.Name,
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Name, (_, b) => b.Name)
                     // NOTE: expression not working: translating this to SQL is hard to get right.
-                    Meta = new CompanyMeta
+                    .SetProperty(e => e.Meta, (_, _) => new CompanyMeta
                     {
                         Required = "Some Text", // assigning JSON deep properties is not supported!
                         Nested = new CompanyNestedMeta
                         {
                             Title = "Some Title", // assigning JSON deep properties is not supported!
                         }
-                    }
-                })
+                    })
+                )
                 .Run();
 
             action.Should().Throw<UnsupportedExpressionException>()

@@ -44,7 +44,7 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.Runners
 
             // initialize relational model:
             serviceProvider.GetRequiredService<IModelRuntimeInitializer>().Initialize(_model);
-            
+
             _dbContext = Substitute.For<DbContext, IInfrastructure<IServiceProvider>>();
             ((IInfrastructure<IServiceProvider>)_dbContext).Instance.Returns(serviceProvider);
 
@@ -86,7 +86,7 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.Runners
             {
                 entityType.AddProperty(property.Name, ConfigurationSource.Explicit);
             }
-            var idProperty = entityType.FindProperty("ID") 
+            var idProperty = entityType.FindProperty("ID")
                 ?? throw new InvalidOperationException("ID property missing on entity " + typeof(TEntity).Name);
             entityType.AddKey(idProperty, ConfigurationSource.Convention);
             return entityType;
@@ -140,10 +140,8 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.Runners
         public void SqlSyntaxRunner_Update_Constant()
         {
             _dbContext.Upsert(new TestEntity())
-                .WhenMatched(e => new TestEntity
-                {
-                    Name = "value"
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Name, e => "value"))
                 .Run();
 
             _rawSqlBuilder.Received().Build(
@@ -157,10 +155,8 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.Runners
         public void SqlSyntaxRunner_Update_Constant_Multiple()
         {
             _dbContext.UpsertRange(new TestEntity(), new TestEntity())
-                .WhenMatched(e => new TestEntity
-                {
-                    Name = "value"
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Name, e => "value"))
                 .Run();
 
             _rawSqlBuilder.Received().Build(
@@ -174,10 +170,8 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.Runners
         public void SqlSyntaxRunner_Update_Source()
         {
             _dbContext.Upsert(new TestEntity())
-                .WhenMatched((ed, en) => new TestEntity
-                {
-                    Name = en.Name
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Name, (ed, en) => en.Name))
                 .Run();
 
             _rawSqlBuilder.Received().Build(
@@ -191,10 +185,8 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.Runners
         public void SqlSyntaxRunner_Update_BinaryAdd()
         {
             _dbContext.Upsert(new TestEntity())
-                .WhenMatched(e => new TestEntity
-                {
-                    Total = e.Total + 5
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Total, e => e.Total + 5))
                 .Run();
 
             _rawSqlBuilder.Received().Build(
@@ -208,10 +200,8 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.Runners
         public void SqlSyntaxRunner_Update_Coalesce()
         {
             _dbContext.Upsert(new TestEntity())
-                .WhenMatched(e => new TestEntity
-                {
-                    Status = e.Status ?? "suffix"
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Status, e => e.Status ?? "suffix"))
                 .Run();
 
             _rawSqlBuilder.Received().Build(
@@ -225,10 +215,8 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.Runners
         public void SqlSyntaxRunner_Update_BinaryAddMultiply()
         {
             _dbContext.Upsert(new TestEntity())
-                .WhenMatched((ed, en) => new TestEntity
-                {
-                    Total = (ed.Total + 5) * en.Total
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Total, (ed, en) => (ed.Total + 5) * en.Total))
                 .Run();
 
             _rawSqlBuilder.Received().Build(
@@ -242,10 +230,8 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.Runners
         public void SqlSyntaxRunner_Update_BinaryAddMultiplyGroup()
         {
             _dbContext.Upsert(new TestEntity())
-                .WhenMatched((ed, en) => new TestEntity
-                {
-                    Total = ed.Total + 3 * en.Total
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Total, (ed, en) => ed.Total + 3 * en.Total))
                 .Run();
 
             _rawSqlBuilder.Received().Build(
@@ -259,10 +245,8 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.Runners
         public void SqlSyntaxRunner_Update_Condition()
         {
             _dbContext.Upsert(new TestEntity())
-                .WhenMatched(e => new TestEntity
-                {
-                    Name = "new"
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Name, e => "new"))
                 .UpdateIf(e => e.Total > 5)
                 .Run();
 
@@ -277,11 +261,9 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.Runners
         public void SqlSyntaxRunner_Update_Condition_UpdateConditionColumn()
         {
             _dbContext.Upsert(new TestEntity())
-                .WhenMatched(e => new TestEntity
-                {
-                    Name = "new",
-                    Total = e.Total + 1
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Name, e => "new")
+                    .SetProperty(e => e.Total, e => e.Total + 1))
                 .UpdateIf(e => e.Total > 5)
                 .Run();
 
@@ -296,10 +278,8 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.Runners
         public void SqlSyntaxRunner_Update_Condition_AndCondition()
         {
             _dbContext.Upsert(new TestEntity())
-                .WhenMatched(e => new TestEntity
-                {
-                    Name = "new"
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Name, e => "new"))
                 .UpdateIf((ed, en) => ed.Total > 5 && ed.Status != en.Status)
                 .Run();
 
@@ -319,10 +299,8 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.Runners
             };
 
             _dbContext.Upsert(new TestEntity())
-                .WhenMatched(e => new TestEntity
-                {
-                    Name = ent.Name
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Name, e => ent.Name))
                 .UpdateIf(e => e.Status != null)
                 .Run();
 
@@ -337,10 +315,8 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.Runners
         public void SqlSyntaxRunner_Update_WatchWithNullCheck()
         {
             _dbContext.Upsert(new TestEntity())
-                .WhenMatched((e, en) => new TestEntity
-                {
-                    Name = en.Name == null ? "new" : en.Name
-                })
+                .WhenMatched(set => set
+                    .SetProperty(e => e.Name, (ed, en) => en.Name == null ? "new" : en.Name))
                 .Run();
 
             _rawSqlBuilder.Received().Build(

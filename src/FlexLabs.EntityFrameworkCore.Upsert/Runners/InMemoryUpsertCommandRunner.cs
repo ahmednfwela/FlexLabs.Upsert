@@ -20,7 +20,8 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Runners
 
         private static IEnumerable<TEntity> RunCore<TEntity>(DbContext dbContext, IEntityType entityType, ICollection<TEntity> entities,
             Expression<Func<TEntity, object>>? matchExpression, Expression<Func<TEntity, object>>? excludeExpression,
-            Expression<Func<TEntity, TEntity, TEntity>>? updateExpression, Expression<Func<TEntity, TEntity, bool>>? updateCondition,
+            Expression<Func<TEntity, TEntity, bool>>? updateCondition,
+            IReadOnlyList<FlexLabs.EntityFrameworkCore.Upsert.UpsertSetter>? updateSetters,
             RunnerQueryOptions queryOptions)
             where TEntity : class
         {
@@ -29,21 +30,34 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Runners
 
             Action<TEntity, TEntity>? updateAction = null;
             Func<TEntity, TEntity, bool>? updateTest = updateCondition?.Compile();
-            if (updateExpression != null)
+            if (updateSetters != null)
             {
-                // If update expression is specified, create an update delegate based on that
-                if (updateExpression.Body is not MemberInitExpression entityUpdater)
-                    throw new ArgumentException(Resources.FormatArgumentMustBeAnInitialiserOfTheTEntityType("updater"), nameof(updateExpression));
+                var compiledSetters = updateSetters
+                    .Select(s => (Setter: s, Getter: CompileSetter<TEntity>(s.ValueExpression)))
+                    .ToArray();
 
-                var properties = entityUpdater.Bindings.Select(b => b.Member).OfType<PropertyInfo>();
-                var updateFunc = updateExpression.Compile();
                 updateAction = (dbEntity, newEntity) =>
                 {
-                    var tmp = updateFunc(dbEntity, newEntity);
-                    foreach (var prop in properties)
+                    foreach (var (setter, getter) in compiledSetters)
                     {
-                        var property = entityType.FindProperty(prop.Name);
-                        prop.SetValue(dbEntity, prop.GetValue(tmp) ?? property?.GetDefaultValue());
+                        var value = getter(dbEntity, newEntity);
+
+                        switch (setter.Member)
+                        {
+                            case PropertyInfo prop:
+                                {
+                                    var property = entityType.FindProperty(prop.Name);
+                                    prop.SetValue(dbEntity, value ?? property?.GetDefaultValue());
+                                    break;
+                                }
+                            case FieldInfo field:
+                                {
+                                    field.SetValue(dbEntity, value);
+                                    break;
+                                }
+                            default:
+                                throw new InvalidOperationException(Resources.FormatUnsupportedMemberType(setter.Member.MemberType));
+                        }
                     }
                 };
             }
@@ -101,6 +115,18 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Runners
             return matches.Select(m => m.DbEntity ?? m.NewEntity);
         }
 
+        private static Func<TEntity, TEntity, object?> CompileSetter<TEntity>(LambdaExpression setterValueExpression)
+        {
+            if (setterValueExpression.Parameters.Count != 2)
+                throw new InvalidOperationException(Resources.SetterValueExpressionsMustHaveExistingAndIncomingParameters);
+
+            var dbEntity = (ParameterExpression)setterValueExpression.Parameters[0];
+            var newEntity = (ParameterExpression)setterValueExpression.Parameters[1];
+
+            var body = Expression.Convert(setterValueExpression.Body, typeof(object));
+            return Expression.Lambda<Func<TEntity, TEntity, object?>>(body, dbEntity, newEntity).Compile();
+        }
+
         private record struct EntityMatch<TEntity>(
             TEntity? DbEntity,
             TEntity NewEntity
@@ -134,25 +160,27 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Runners
 
         /// <inheritdoc/>
         public override int Run<TEntity>(DbContext dbContext, IEntityType entityType, ICollection<TEntity> entities, Expression<Func<TEntity, object>>? matchExpression,
-            Expression<Func<TEntity, object>>? excludeExpression, Expression<Func<TEntity, TEntity, TEntity>>? updateExpression,
+            Expression<Func<TEntity, object>>? excludeExpression,
+            IReadOnlyList<FlexLabs.EntityFrameworkCore.Upsert.UpsertSetter>? updateSetters,
             Expression<Func<TEntity, TEntity, bool>>? updateCondition, RunnerQueryOptions queryOptions)
         {
             ArgumentNullException.ThrowIfNull(dbContext);
             ArgumentNullException.ThrowIfNull(entityType);
 
-            RunCore(dbContext, entityType, entities, matchExpression, excludeExpression, updateExpression, updateCondition, queryOptions);
+            RunCore(dbContext, entityType, entities, matchExpression, excludeExpression, updateCondition, updateSetters, queryOptions);
             return dbContext.SaveChanges();
         }
 
         /// <inheritdoc/>
         public override ICollection<TEntity> RunAndReturn<TEntity>(DbContext dbContext, IEntityType entityType, ICollection<TEntity> entities,
             Expression<Func<TEntity, object>>? matchExpression, Expression<Func<TEntity, object>>? excludeExpression,
-            Expression<Func<TEntity, TEntity, TEntity>>? updateExpression, Expression<Func<TEntity, TEntity, bool>>? updateCondition, RunnerQueryOptions queryOptions)
+            IReadOnlyList<FlexLabs.EntityFrameworkCore.Upsert.UpsertSetter>? updateSetters,
+            Expression<Func<TEntity, TEntity, bool>>? updateCondition, RunnerQueryOptions queryOptions)
         {
             ArgumentNullException.ThrowIfNull(dbContext);
             ArgumentNullException.ThrowIfNull(entityType);
 
-            var result = RunCore(dbContext, entityType, entities, matchExpression, excludeExpression, updateExpression, updateCondition, queryOptions);
+            var result = RunCore(dbContext, entityType, entities, matchExpression, excludeExpression, updateCondition, updateSetters, queryOptions);
             dbContext.SaveChanges();
 
             return result.ToArray();
@@ -161,26 +189,28 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Runners
         /// <inheritdoc/>
         public override Task<int> RunAsync<TEntity>(DbContext dbContext, IEntityType entityType, ICollection<TEntity> entities,
             Expression<Func<TEntity, object>>? matchExpression, Expression<Func<TEntity, object>>? excludeExpression,
-            Expression<Func<TEntity, TEntity, TEntity>>? updateExpression, Expression<Func<TEntity, TEntity, bool>>? updateCondition,
+            IReadOnlyList<FlexLabs.EntityFrameworkCore.Upsert.UpsertSetter>? updateSetters,
+            Expression<Func<TEntity, TEntity, bool>>? updateCondition,
             RunnerQueryOptions queryOptions, CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(dbContext);
             ArgumentNullException.ThrowIfNull(entityType);
 
-            RunCore(dbContext, entityType, entities, matchExpression, excludeExpression, updateExpression, updateCondition, queryOptions);
+            RunCore(dbContext, entityType, entities, matchExpression, excludeExpression, updateCondition, updateSetters, queryOptions);
             return dbContext.SaveChangesAsync(cancellationToken);
         }
 
         /// <inheritdoc/>
         public override async Task<ICollection<TEntity>> RunAndReturnAsync<TEntity>(DbContext dbContext, IEntityType entityType, ICollection<TEntity> entities,
             Expression<Func<TEntity, object>>? matchExpression, Expression<Func<TEntity, object>>? excludeExpression,
-            Expression<Func<TEntity, TEntity, TEntity>>? updateExpression, Expression<Func<TEntity, TEntity, bool>>? updateCondition, RunnerQueryOptions queryOptions,
+            IReadOnlyList<FlexLabs.EntityFrameworkCore.Upsert.UpsertSetter>? updateSetters,
+            Expression<Func<TEntity, TEntity, bool>>? updateCondition, RunnerQueryOptions queryOptions,
             CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(dbContext);
             ArgumentNullException.ThrowIfNull(entityType);
 
-            var result = RunCore(dbContext, entityType, entities, matchExpression, excludeExpression, updateExpression, updateCondition, queryOptions);
+            var result = RunCore(dbContext, entityType, entities, matchExpression, excludeExpression, updateCondition, updateSetters, queryOptions);
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
             return result.ToArray();
